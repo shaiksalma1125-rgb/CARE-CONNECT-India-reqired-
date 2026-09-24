@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Citizen, hospital staff, or healthcare administrator user profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "format": "email", "maxLength": 150 },
+        "mobile": { "type": "string", "maxLength": 20 },
+        "role": { "type": "string", "enum": ["CITIZEN", "HOSPITAL_STAFF", "ADMIN"] },
+        "location": { "type": "string", "maxLength": 200 },
+        "district": { "type": "string", "maxLength": 100 },
+        "state": { "type": "string", "maxLength": 100 },
+        "hospitalId": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "Appointment": {
+      "title": "Appointment",
+      "description": "Healthcare OPD appointment booking token",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "appointmentId": { "type": "string", "maxLength": 50 },
+        "userId": { "type": "string" },
+        "hospitalId": { "type": "string" },
+        "hospitalName": { "type": "string", "maxLength": 200 },
+        "doctorId": { "type": "string" },
+        "doctorName": { "type": "string", "maxLength": 150 },
+        "doctorSpecialization": { "type": "string", "maxLength": 100 },
+        "patientName": { "type": "string", "maxLength": 100 },
+        "appointmentDate": { "type": "string" },
+        "appointmentTime": { "type": "string" },
+        "reason": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["BOOKED", "CONFIRMED", "COMPLETED", "CANCELLED"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["appointmentId", "userId", "hospitalId", "patientName", "appointmentDate", "appointmentTime", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile data stored in Firestore"
+    },
+    "/appointments/{appointmentId}": {
+      "schema": "Appointment",
+      "description": "OPD appointments and queue tokens stored in Firestore"
+    }
+  }
+}
