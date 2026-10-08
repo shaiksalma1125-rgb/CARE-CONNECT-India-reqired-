@@ -70,12 +70,34 @@ export const HospitalDetailsView: React.FC<HospitalDetailsViewProps> = ({
     }, 100);
   };
 
-  const hospital = useMemo(() => apiStore.getHospitalById(hospitalId), [hospitalId]);
+  const [dataVersion, setDataVersion] = useState(0);
+
+  React.useEffect(() => {
+    const handleDataUpdate = () => {
+      setDataVersion((v) => v + 1);
+    };
+    window.addEventListener('healthcare-data-updated', handleDataUpdate);
+    window.addEventListener('healthcare-doctors-updated', handleDataUpdate);
+    window.addEventListener('healthcare-medicines-updated', handleDataUpdate);
+    window.addEventListener('healthcare-services-updated', handleDataUpdate);
+    window.addEventListener('healthcare-appointments-updated', handleDataUpdate);
+    window.addEventListener('storage', handleDataUpdate);
+    return () => {
+      window.removeEventListener('healthcare-data-updated', handleDataUpdate);
+      window.removeEventListener('healthcare-doctors-updated', handleDataUpdate);
+      window.removeEventListener('healthcare-medicines-updated', handleDataUpdate);
+      window.removeEventListener('healthcare-services-updated', handleDataUpdate);
+      window.removeEventListener('healthcare-appointments-updated', handleDataUpdate);
+      window.removeEventListener('storage', handleDataUpdate);
+    };
+  }, []);
+
+  const hospital = useMemo(() => apiStore.getHospitalById(hospitalId), [hospitalId, dataVersion]);
   const singleHospitalList = useMemo(() => (hospital ? [hospital] : []), [hospital]);
-  const doctors = useMemo(() => apiStore.getDoctors(hospitalId), [hospitalId]);
-  const services = useMemo(() => apiStore.getServices(hospitalId), [hospitalId]);
-  const medicines = useMemo(() => apiStore.getMedicines(hospitalId), [hospitalId]);
-  const feedbacks = useMemo(() => apiStore.getFeedbacks(hospitalId), [hospitalId]);
+  const doctors = useMemo(() => apiStore.getDoctors(hospitalId), [hospitalId, dataVersion]);
+  const services = useMemo(() => apiStore.getServices(hospitalId), [hospitalId, dataVersion]);
+  const medicines = useMemo(() => apiStore.getMedicines(hospitalId), [hospitalId, dataVersion]);
+  const feedbacks = useMemo(() => apiStore.getFeedbacks(hospitalId), [hospitalId, dataVersion]);
 
   if (!hospital) {
     return (
@@ -371,7 +393,9 @@ export const HospitalDetailsView: React.FC<HospitalDetailsViewProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {doctors.map((doc) => {
               const isAvail = doc.availabilityStatus === 'AVAILABLE';
+              const isOnLeave = doc.availabilityStatus === 'ON_LEAVE' || doc.status === 'ON_LEAVE';
               const isInConsult = doc.availabilityStatus === 'IN_CONSULTATION';
+              const isOffDuty = doc.availabilityStatus === 'OFF_DUTY';
 
               return (
                 <div
@@ -394,14 +418,22 @@ export const HospitalDetailsView: React.FC<HospitalDetailsViewProps> = ({
 
                       <span
                         className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
-                          isAvail
+                          isOnLeave
+                            ? 'bg-rose-50 text-rose-800 border-rose-300'
+                            : isAvail
                             ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                             : isInConsult
                             ? 'bg-amber-50 text-amber-800 border-amber-300'
-                            : 'bg-rose-50 text-rose-800 border-rose-300'
+                            : 'bg-slate-100 text-slate-700 border-slate-300'
                         }`}
                       >
-                        {isAvail ? '● Available' : isInConsult ? '● In Consultation' : '● On Leave'}
+                        {isOnLeave
+                          ? '● On Leave'
+                          : isAvail
+                          ? '● Available'
+                          : isInConsult
+                          ? '● In Consultation'
+                          : '● Off Duty'}
                       </span>
                     </div>
 
@@ -446,12 +478,17 @@ export const HospitalDetailsView: React.FC<HospitalDetailsViewProps> = ({
                       </button>
                       <button
                         id={`book-with-doc-${doc.id}`}
+                        disabled={isOnLeave || isOffDuty}
                         onClick={() =>
                           onNavigate('appointment', { hospitalId: hospital.id, doctorId: doc.id })
                         }
-                        className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs transition-colors"
+                        className={`px-3 py-1.5 rounded-lg font-semibold text-xs shadow-xs transition-colors ${
+                          isOnLeave || isOffDuty
+                            ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                            : 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'
+                        }`}
                       >
-                        Book OPD
+                        {isOnLeave ? 'On Leave' : isOffDuty ? 'Off Duty' : 'Book OPD'}
                       </button>
                     </div>
                   </div>

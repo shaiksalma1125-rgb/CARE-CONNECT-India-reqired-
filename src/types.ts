@@ -47,6 +47,13 @@ export interface Hospital {
   isOpen: boolean;
 }
 
+export type DoctorAvailabilityStatus =
+  | 'AVAILABLE'
+  | 'IN_CONSULTATION'
+  | 'ON_LEAVE'
+  | 'OFF_DUTY'
+  | 'EMERGENCY_DUTY';
+
 export interface Doctor {
   id: string;
   hospitalId: string;
@@ -55,7 +62,8 @@ export interface Doctor {
   qualification: string;
   experience: number; // years
   consultationFee: number; // 0 for government
-  availabilityStatus: 'AVAILABLE' | 'IN_CONSULTATION' | 'ON_LEAVE';
+  availabilityStatus: DoctorAvailabilityStatus;
+  status?: DoctorAvailabilityStatus | string;
   photoUrl?: string;
   availableDays: string[];
   timeSlots: string[];

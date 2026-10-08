@@ -64,8 +64,20 @@ export const DEMO_USERS: User[] = [
     createdAt: '2026-02-20T11:00:00Z'
   },
   {
+    id: 'user-staff-aiims',
+    name: 'Dr. Suresh Varma (Staff - AIIMS)',
+    email: 'staff.aiims@hospital.gov.in',
+    mobile: '9440188995',
+    role: 'HOSPITAL_STAFF',
+    location: 'Mangalagiri Urban',
+    district: 'Guntur District',
+    state: 'Andhra Pradesh',
+    hospitalId: 'hosp-aiims',
+    createdAt: '2025-11-15T09:00:00Z'
+  },
+  {
     id: 'user-staff-1',
-    name: 'Dr. S. Anitha (Medical Officer)',
+    name: 'Dr. S. Anitha (Medical Officer - GGH)',
     email: 'staff@ggh.gov.in',
     mobile: '9440188992',
     role: 'HOSPITAL_STAFF',

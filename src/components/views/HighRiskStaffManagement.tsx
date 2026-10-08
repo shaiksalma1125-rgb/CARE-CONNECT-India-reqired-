@@ -23,7 +23,8 @@ import {
   ChevronRight,
   ExternalLink,
   ClipboardList,
-  Edit3
+  Edit3,
+  Trash2
 } from 'lucide-react';
 import { apiStore } from '../../services/apiStore';
 import {
@@ -828,6 +829,21 @@ export const HighRiskStaffManagement: React.FC<HighRiskStaffManagementProps> = (
                     >
                       <Edit3 className="w-3.5 h-3.5 text-slate-600" />
                       <span>Edit / Reschedule</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Cancel and delete high-risk follow-up for ${patient.patientName}? This will synchronize immediately with the Citizen Portal.`)) {
+                          apiStore.deleteHighRiskFollowUp(patient.id);
+                          setToastMessage(`Follow-up for ${patient.patientName} removed.`);
+                          setRenderKey((k) => k + 1);
+                        }
+                      }}
+                      className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                      title="Delete / cancel follow-up"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Delete</span>
                     </button>
 
                     <button

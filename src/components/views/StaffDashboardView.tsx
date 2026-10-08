@@ -87,9 +87,8 @@ export const StaffDashboardView: React.FC<StaffDashboardViewProps> = ({
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
 
-  // Determine hospital managed by this staff member
-  const initialHospitalId = currentUser?.hospitalId || (hospitals[0] ? hospitals[0].id : '');
-  const [selectedHospitalId, setSelectedHospitalId] = useState<string>(initialHospitalId);
+  // Hospital managed by this staff member: strictly derived from authenticated staff credentials
+  const selectedHospitalId = currentUser?.hospitalId || 'hosp-aiims';
   const [activeTab, setActiveTab] = useState<
     'doctors' | 'services' | 'medicines' | 'appointments' | 'complaints' | 'referrals' | 'high-risk'
   >('doctors');
@@ -145,16 +144,28 @@ export const StaffDashboardView: React.FC<StaffDashboardViewProps> = ({
   const [refStatus, setRefStatus] = useState<PatientReferral['status']>('Pending');
   const [refTransport, setRefTransport] = useState<string>('108_AMBULANCE');
 
-  // Real-time listener for referral updates across portal
+  // Real-time listener for appointments, doctors, stock, services & referral updates across portal
   React.useEffect(() => {
-    const handleReferralsUpdated = () => {
+    const handleDataUpdated = () => {
       setRenderCount((c) => c + 1);
     };
-    window.addEventListener('healthcare-referrals-updated', handleReferralsUpdated);
-    window.addEventListener('storage', handleReferralsUpdated);
+    window.addEventListener('healthcare-appointments-updated', handleDataUpdated);
+    window.addEventListener('healthcare-doctors-updated', handleDataUpdated);
+    window.addEventListener('healthcare-medicines-updated', handleDataUpdated);
+    window.addEventListener('healthcare-services-updated', handleDataUpdated);
+    window.addEventListener('healthcare-referrals-updated', handleDataUpdated);
+    window.addEventListener('healthcare-data-updated', handleDataUpdated);
+    window.addEventListener('high_risk_data_updated', handleDataUpdated);
+    window.addEventListener('storage', handleDataUpdated);
     return () => {
-      window.removeEventListener('healthcare-referrals-updated', handleReferralsUpdated);
-      window.removeEventListener('storage', handleReferralsUpdated);
+      window.removeEventListener('healthcare-appointments-updated', handleDataUpdated);
+      window.removeEventListener('healthcare-doctors-updated', handleDataUpdated);
+      window.removeEventListener('healthcare-medicines-updated', handleDataUpdated);
+      window.removeEventListener('healthcare-services-updated', handleDataUpdated);
+      window.removeEventListener('healthcare-referrals-updated', handleDataUpdated);
+      window.removeEventListener('healthcare-data-updated', handleDataUpdated);
+      window.removeEventListener('high_risk_data_updated', handleDataUpdated);
+      window.removeEventListener('storage', handleDataUpdated);
     };
   }, []);
 
@@ -566,21 +577,21 @@ export const StaffDashboardView: React.FC<StaffDashboardViewProps> = ({
             </p>
           </div>
 
-          {/* Hospital Switcher & Refresh Button */}
+          {/* Hospital Display: Fixed & Scoped to Logged-in Staff Member */}
           <div className="flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-slate-400" />
-            <select
-              id="staff-hospital-switcher"
-              value={selectedHospitalId}
-              onChange={(e) => setSelectedHospitalId(e.target.value)}
-              className="p-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-xs"
-            >
-              {hospitals.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.name} ({h.hospitalType})
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-slate-50 border border-slate-200 shadow-2xs">
+              <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0">
+                <Building2 className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 text-left">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 leading-none">
+                  Assigned Facility (Fixed)
+                </span>
+                <span className="font-extrabold text-xs sm:text-sm text-slate-900 truncate block leading-tight mt-0.5 max-w-[200px] sm:max-w-[280px]">
+                  {currentHospital?.name || 'Assigned Hospital'}
+                </span>
+              </div>
+            </div>
             <button
               id="staff-create-referral-quick-btn"
               type="button"
@@ -758,12 +769,18 @@ export const StaffDashboardView: React.FC<StaffDashboardViewProps> = ({
                             ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
                             : doc.availabilityStatus === 'IN_CONSULTATION'
                             ? 'bg-amber-50 text-amber-900 border-amber-300'
-                            : 'bg-rose-50 text-rose-900 border-rose-300'
+                            : doc.availabilityStatus === 'ON_LEAVE'
+                            ? 'bg-rose-50 text-rose-900 border-rose-300'
+                            : doc.availabilityStatus === 'OFF_DUTY'
+                            ? 'bg-slate-100 text-slate-800 border-slate-300'
+                            : 'bg-purple-50 text-purple-900 border-purple-300'
                         }`}
                       >
-                        <option value="AVAILABLE">AVAILABLE</option>
-                        <option value="IN_CONSULTATION">IN_CONSULTATION</option>
-                        <option value="ON_LEAVE">ON_LEAVE</option>
+                        <option value="AVAILABLE">🟢 AVAILABLE</option>
+                        <option value="IN_CONSULTATION">🟡 IN_CONSULTATION</option>
+                        <option value="ON_LEAVE">🔴 ON_LEAVE</option>
+                        <option value="OFF_DUTY">⚪ OFF_DUTY</option>
+                        <option value="EMERGENCY_DUTY">🚨 EMERGENCY_DUTY</option>
                       </select>
                     </td>
                     <td className="p-3 text-right">
@@ -1993,7 +2010,6 @@ export const StaffDashboardView: React.FC<StaffDashboardViewProps> = ({
         <HighRiskStaffManagement
           hospitalId={selectedHospitalId}
           currentUser={currentUser}
-          onNavigateToHospital={(hId) => setSelectedHospitalId(hId)}
         />
       )}
 

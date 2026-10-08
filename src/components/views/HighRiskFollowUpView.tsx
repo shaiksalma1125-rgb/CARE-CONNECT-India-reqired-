@@ -38,19 +38,21 @@ export const HighRiskFollowUpView: React.FC<HighRiskFollowUpViewProps> = ({
   const t = translations[language] || translations.en;
   const todayStr = new Date().toISOString().split('T')[0];
 
+  const effectiveUser = currentUser || apiStore.getCurrentUser();
+
   // Auto-detect role: Hospital Staff / Admins vs Citizen
   const isStaffOrAdmin =
-    currentUser?.role === 'HOSPITAL_STAFF' ||
-    currentUser?.role === 'HOSPITAL_ADMIN' ||
-    currentUser?.role === 'ADMIN';
+    effectiveUser?.role === 'HOSPITAL_STAFF' ||
+    effectiveUser?.role === 'HOSPITAL_ADMIN' ||
+    effectiveUser?.role === 'ADMIN';
 
   // 1. HOSPITAL STAFF PORTAL: MANAGEMENT DASHBOARD
   if (isStaffOrAdmin) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <HighRiskStaffManagement
-          hospitalId={currentUser?.hospitalId}
-          currentUser={currentUser}
+          hospitalId={effectiveUser?.hospitalId}
+          currentUser={effectiveUser}
           onNavigateToHospital={onNavigateToHospital}
         />
       </div>
@@ -58,7 +60,7 @@ export const HighRiskFollowUpView: React.FC<HighRiskFollowUpViewProps> = ({
   }
 
   // 2. UNAUTHENTICATED VISITOR NOTICE (No separate login page or fake cards)
-  if (!currentUser) {
+  if (!effectiveUser) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16 text-center space-y-4">
         <div className="w-16 h-16 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-center mx-auto text-rose-600 shadow-xs">
@@ -81,17 +83,17 @@ export const HighRiskFollowUpView: React.FC<HighRiskFollowUpViewProps> = ({
   // No other patients, no staff controls, no enrollment forms, no risk-management controls.
   // =========================================================================
   const [followUps, setFollowUps] = React.useState<any[]>(() =>
-    currentUser ? apiStore.getFollowUpsForPatient(currentUser) : []
+    effectiveUser ? apiStore.getFollowUpsForPatient(effectiveUser) : []
   );
 
   React.useEffect(() => {
-    if (!currentUser) {
+    if (!effectiveUser) {
       setFollowUps([]);
       return;
     }
 
     const loadData = () => {
-      const updated = apiStore.getFollowUpsForPatient(currentUser);
+      const updated = apiStore.getFollowUpsForPatient(effectiveUser);
       setFollowUps(updated);
     };
 
@@ -104,7 +106,7 @@ export const HighRiskFollowUpView: React.FC<HighRiskFollowUpViewProps> = ({
       window.removeEventListener('high_risk_data_updated', loadData);
       window.removeEventListener('storage', loadData);
     };
-  }, [currentUser?.id, currentUser?.email, currentUser?.mobile]);
+  }, [effectiveUser?.id, effectiveUser?.email, effectiveUser?.mobile]);
 
   const hospitals = apiStore.getHospitals();
 

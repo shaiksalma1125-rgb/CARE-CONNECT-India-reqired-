@@ -162,7 +162,19 @@ class ApiStore {
   }
 
   getCurrentUser(): User | null {
-    return getLocal<User | null>(STORAGE_KEYS.CURRENT_USER, null);
+    let user = getLocal<User | null>(STORAGE_KEYS.CURRENT_USER, null);
+    if (!user) {
+      const users = this.getUsers();
+      const defaultUser =
+        users.find((u) => u.email === 'shaiksalma1125@gmail.com') ||
+        users.find((u) => u.role === 'CITIZEN') ||
+        users[0];
+      if (defaultUser) {
+        user = defaultUser;
+        this.setCurrentUser(user);
+      }
+    }
+    return user;
   }
 
   setCurrentUser(user: User | null): void {
@@ -172,29 +184,41 @@ class ApiStore {
       localStorage.removeItem('healthconnect_user_authenticated');
     }
     setLocal(STORAGE_KEYS.CURRENT_USER, user);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('healthcare-user-changed', { detail: { user } }));
+    }
   }
 
-  switchDemoUser(role: UserRole, targetHospitalId?: string): User {
+  switchDemoUser(role: UserRole, targetHospitalId?: string, targetUserId?: string): User {
     const users = this.getUsers();
     let found: User | undefined;
-    if (role === 'HOSPITAL_ADMIN' || role === 'ADMIN') {
-      if (targetHospitalId) {
-        found = users.find(
-          (u) => (u.role === 'HOSPITAL_ADMIN' || u.role === 'ADMIN') && u.hospitalId === targetHospitalId
-        );
+    if (targetUserId) {
+      found = users.find((u) => u.id === targetUserId);
+    }
+    if (!found) {
+      if (role === 'HOSPITAL_ADMIN' || role === 'ADMIN') {
+        if (targetHospitalId) {
+          found = users.find(
+            (u) => (u.role === 'HOSPITAL_ADMIN' || u.role === 'ADMIN') && u.hospitalId === targetHospitalId
+          );
+        }
+        if (!found) {
+          found = users.find((u) => u.role === 'HOSPITAL_ADMIN' || u.role === 'ADMIN');
+        }
+      } else if (role === 'HOSPITAL_STAFF') {
+        if (targetHospitalId) {
+          found = users.find((u) => u.role === 'HOSPITAL_STAFF' && u.hospitalId === targetHospitalId);
+        }
+        if (!found) {
+          // Default to AIIMS Mangalagiri staff
+          found =
+            users.find((u) => u.role === 'HOSPITAL_STAFF' && u.hospitalId === 'hosp-aiims') ||
+            users.find((u) => u.role === 'HOSPITAL_STAFF');
+        }
+      } else {
+        found = users.find((u) => u.role === 'CITIZEN' && u.email === 'shaiksalma1125@gmail.com') ||
+                users.find((u) => u.role === role);
       }
-      if (!found) {
-        found = users.find((u) => u.role === 'HOSPITAL_ADMIN' || u.role === 'ADMIN');
-      }
-    } else if (role === 'HOSPITAL_STAFF') {
-      if (targetHospitalId) {
-        found = users.find((u) => u.role === 'HOSPITAL_STAFF' && u.hospitalId === targetHospitalId);
-      }
-      if (!found) {
-        found = users.find((u) => u.role === 'HOSPITAL_STAFF');
-      }
-    } else {
-      found = users.find((u) => u.role === role);
     }
     const finalUser = found || users[0];
     this.setCurrentUser(finalUser);
@@ -611,6 +635,10 @@ class ApiStore {
         updated = true;
       }
     }
+    // Ensure all doctors have matching status alias
+    docs.forEach((d) => {
+      d.status = d.availabilityStatus;
+    });
     if (updated) {
       setLocal(STORAGE_KEYS.DOCTORS, docs);
     }
@@ -626,13 +654,23 @@ class ApiStore {
 
   updateDoctorStatus(
     doctorId: string,
-    status: 'AVAILABLE' | 'IN_CONSULTATION' | 'ON_LEAVE'
+    status: 'AVAILABLE' | 'IN_CONSULTATION' | 'ON_LEAVE' | 'OFF_DUTY' | 'EMERGENCY_DUTY' | string
   ): Doctor | undefined {
     const docs = this.getDoctors();
     const idx = docs.findIndex((d) => d.id === doctorId);
     if (idx !== -1) {
-      docs[idx].availabilityStatus = status;
+      docs[idx].availabilityStatus = status as any;
+      docs[idx].status = status as any;
       setLocal(STORAGE_KEYS.DOCTORS, docs);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('healthcare-doctors-updated', { detail: { doctorId, status } })
+        );
+        window.dispatchEvent(
+          new CustomEvent('healthcare-data-updated', { detail: { type: 'DOCTORS', doctorId, status } })
+        );
+        window.dispatchEvent(new Event('storage'));
+      }
       return docs[idx];
     }
     return undefined;
@@ -645,6 +683,11 @@ class ApiStore {
       if (idx !== -1) {
         docs[idx] = { ...docs[idx], ...doctor } as Doctor;
         setLocal(STORAGE_KEYS.DOCTORS, docs);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('healthcare-doctors-updated'));
+          window.dispatchEvent(new CustomEvent('healthcare-data-updated'));
+          window.dispatchEvent(new Event('storage'));
+        }
         return docs[idx];
       }
     }
@@ -662,12 +705,22 @@ class ApiStore {
     };
     docs.push(newDoc);
     setLocal(STORAGE_KEYS.DOCTORS, docs);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('healthcare-doctors-updated'));
+      window.dispatchEvent(new CustomEvent('healthcare-data-updated'));
+      window.dispatchEvent(new Event('storage'));
+    }
     return newDoc;
   }
 
   deleteDoctor(id: string): void {
     const docs = this.getDoctors().filter((d) => d.id !== id);
     setLocal(STORAGE_KEYS.DOCTORS, docs);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('healthcare-doctors-updated'));
+      window.dispatchEvent(new CustomEvent('healthcare-data-updated'));
+      window.dispatchEvent(new Event('storage'));
+    }
   }
 
   updateDoctorSlots(doctorId: string, timeSlots: string[], availableDays?: string[]): Doctor | undefined {
@@ -898,6 +951,17 @@ class ApiStore {
       }
       srvs[idx].updatedAt = new Date().toISOString().replace('T', ' ').substring(0, 16);
       setLocal(STORAGE_KEYS.SERVICES, srvs);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('healthcare-services-updated', {
+            detail: { serviceId, available, waitTime }
+          })
+        );
+        window.dispatchEvent(
+          new CustomEvent('healthcare-data-updated', { detail: { type: 'SERVICES' } })
+        );
+        window.dispatchEvent(new Event('storage'));
+      }
       return srvs[idx];
     }
     return undefined;
@@ -973,6 +1037,17 @@ class ApiStore {
           : 'AVAILABLE';
       meds[idx].updatedAt = new Date().toISOString().replace('T', ' ').substring(0, 16);
       setLocal(STORAGE_KEYS.MEDICINES, meds);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('healthcare-medicines-updated', {
+            detail: { medicineId, quantity, status: meds[idx].status }
+          })
+        );
+        window.dispatchEvent(
+          new CustomEvent('healthcare-data-updated', { detail: { type: 'MEDICINES' } })
+        );
+        window.dispatchEvent(new Event('storage'));
+      }
       return meds[idx];
     }
     return undefined;
@@ -999,6 +1074,17 @@ class ApiStore {
           updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16)
         } as MedicineStock;
         setLocal(STORAGE_KEYS.MEDICINES, meds);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('healthcare-medicines-updated', {
+              detail: { medicineId: med.id, quantity: qty, status }
+            })
+          );
+          window.dispatchEvent(
+            new CustomEvent('healthcare-data-updated', { detail: { type: 'MEDICINES' } })
+          );
+          window.dispatchEvent(new Event('storage'));
+        }
         return meds[idx];
       }
     }
@@ -1015,12 +1101,30 @@ class ApiStore {
     };
     meds.push(newMed);
     setLocal(STORAGE_KEYS.MEDICINES, meds);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('healthcare-medicines-updated', {
+          detail: { medicineId: newMed.id, quantity: qty, status }
+        })
+      );
+      window.dispatchEvent(
+        new CustomEvent('healthcare-data-updated', { detail: { type: 'MEDICINES' } })
+      );
+      window.dispatchEvent(new Event('storage'));
+    }
     return newMed;
   }
 
   deleteMedicine(id: string): void {
     const meds = this.getMedicines().filter((m) => m.id !== id);
     setLocal(STORAGE_KEYS.MEDICINES, meds);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('healthcare-medicines-updated'));
+      window.dispatchEvent(
+        new CustomEvent('healthcare-data-updated', { detail: { type: 'MEDICINES' } })
+      );
+      window.dispatchEvent(new Event('storage'));
+    }
   }
 
   findAlternativeHospitalsForMedicine(medicineName: string, currentHospitalId: string): Array<{
@@ -1592,6 +1696,7 @@ class ApiStore {
     let patientId = '';
     let email = '';
     let phone = '';
+    let userName = '';
 
     if (typeof userOrId === 'string') {
       patientId = userOrId.trim();
@@ -1599,14 +1704,16 @@ class ApiStore {
       if (user) {
         email = String(user.email || '').toLowerCase().trim();
         phone = String(user.mobile || '').replace(/\D/g, '').slice(-10);
+        userName = String(user.name || '').toLowerCase().trim();
       }
     } else if (userOrId) {
       patientId = String(userOrId.id || '').trim();
       email = String(userOrId.email || '').toLowerCase().trim();
       phone = String(userOrId.mobile || '').replace(/\D/g, '').slice(-10);
+      userName = String(userOrId.name || '').toLowerCase().trim();
     }
 
-    if (!patientId && !email && !phone) return [];
+    if (!patientId && !email && !phone && !userName) return [];
 
     return all.filter((p) => {
       // Match by exact patientId
@@ -1618,6 +1725,8 @@ class ApiStore {
         const pPhone = String(p.patientPhone || p.phone || '').replace(/\D/g, '').slice(-10);
         if (pPhone && pPhone === phone) return true;
       }
+      // Match by exact patient name
+      if (userName && p.patientName && p.patientName.toLowerCase().trim() === userName) return true;
       return false;
     });
   }
@@ -1847,6 +1956,17 @@ class ApiStore {
       return list[idx];
     }
     return undefined;
+  }
+
+  deleteHighRiskFollowUp(followUpId: string): boolean {
+    const list = this.getHighRiskPatients();
+    const filtered = list.filter((h) => h.id !== followUpId);
+    if (filtered.length !== list.length) {
+      setLocal(STORAGE_KEYS.HIGH_RISK, filtered);
+      this.notifyHighRiskUpdate(followUpId);
+      return true;
+    }
+    return false;
   }
 
   addHighRiskPatient(

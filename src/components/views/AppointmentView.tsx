@@ -63,9 +63,12 @@ export const AppointmentView: React.FC<AppointmentViewProps> = ({
 
   const [selectedSpecialty, setSelectedSpecialty] = useState<string>('All');
 
+  // Real-time slot & doctor update trigger
+  const [appointmentVersion, setAppointmentVersion] = useState(0);
+
   const allHospDoctors = React.useMemo(() => {
     return apiStore.getDoctors(selectedHospitalId);
-  }, [selectedHospitalId]);
+  }, [selectedHospitalId, appointmentVersion]);
 
   const hospitalSpecialties = React.useMemo(() => {
     const set = new Set<string>();
@@ -97,21 +100,31 @@ export const AppointmentView: React.FC<AppointmentViewProps> = ({
   );
 
   const selectedDoctor = availableDoctors.find((d) => d.id === selectedDoctorId) || allHospDoctors.find((d) => d.id === selectedDoctorId);
+  const isDoctorUnavailable = Boolean(
+    selectedDoctor && (
+      selectedDoctor.availabilityStatus === 'ON_LEAVE' ||
+      selectedDoctor.status === 'ON_LEAVE' ||
+      selectedDoctor.availabilityStatus === 'OFF_DUTY' ||
+      selectedDoctor.status === 'OFF_DUTY'
+    )
+  );
+
   const [appointmentTime, setAppointmentTime] = useState<string>(
     prefillSlot || (selectedDoctor?.timeSlots[0] || '09:00 AM - 10:00 AM')
   );
-
-  // Real-time slot update trigger
-  const [appointmentVersion, setAppointmentVersion] = useState(0);
 
   useEffect(() => {
     const handleAppointmentsChange = () => {
       setAppointmentVersion((v) => v + 1);
     };
     window.addEventListener('healthcare-appointments-updated', handleAppointmentsChange);
+    window.addEventListener('healthcare-doctors-updated', handleAppointmentsChange);
+    window.addEventListener('healthcare-data-updated', handleAppointmentsChange);
     window.addEventListener('storage', handleAppointmentsChange);
     return () => {
       window.removeEventListener('healthcare-appointments-updated', handleAppointmentsChange);
+      window.removeEventListener('healthcare-doctors-updated', handleAppointmentsChange);
+      window.removeEventListener('healthcare-data-updated', handleAppointmentsChange);
       window.removeEventListener('storage', handleAppointmentsChange);
     };
   }, []);
@@ -346,7 +359,7 @@ export const AppointmentView: React.FC<AppointmentViewProps> = ({
     }
 
     const doc = availableDoctors.find((d) => d.id === selectedDoctorId) || allHospDoctors.find((d) => d.id === selectedDoctorId);
-    if (doc && (doc.status === 'ON_LEAVE' || doc.status === 'UNAVAILABLE')) {
+    if (doc && (doc.status === 'ON_LEAVE' || doc.availabilityStatus === 'ON_LEAVE' || doc.status === 'OFF_DUTY' || doc.availabilityStatus === 'OFF_DUTY' || doc.status === 'UNAVAILABLE')) {
       setFormError(`Dr. ${doc.name} is currently On Leave / Unavailable. Please choose an available doctor.`);
       return;
     }
@@ -925,43 +938,105 @@ export const AppointmentView: React.FC<AppointmentViewProps> = ({
                       onChange={(e) => setSelectedDoctorId(e.target.value)}
                       className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-xs"
                     >
-                      {availableDoctors.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name} — {d.specialization} [{d.status === 'AVAILABLE' ? '🟢 Available' : d.status === 'IN_CONSULTATION' ? '🟡 In Consultation' : '🔴 On Leave'}]
-                        </option>
-                      ))}
+                      {availableDoctors.map((d) => {
+                        const isAvail = d.availabilityStatus === 'AVAILABLE';
+                        const isOnLeave = d.availabilityStatus === 'ON_LEAVE';
+                        const isInConsult = d.availabilityStatus === 'IN_CONSULTATION';
+                        const isOffDuty = d.availabilityStatus === 'OFF_DUTY';
+                        const isEmergency = d.availabilityStatus === 'EMERGENCY_DUTY';
+                        const statusBadge = isOnLeave
+                          ? '🔴 ON LEAVE'
+                          : isAvail
+                          ? '🟢 AVAILABLE'
+                          : isInConsult
+                          ? '🟡 IN CONSULTATION'
+                          : isOffDuty
+                          ? '⚪ OFF DUTY'
+                          : isEmergency
+                          ? '🚨 EMERGENCY DUTY'
+                          : '🟢 AVAILABLE';
+
+                        return (
+                          <option key={d.id} value={d.id}>
+                            {d.name} — {d.specialization} [{statusBadge}]
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 </div>
               </div>
 
               {/* Doctor Live Status Card */}
-              {selectedDoctor && (
-                <div className={`p-3 rounded-2xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
-                  selectedDoctor.status === 'ON_LEAVE'
-                    ? 'bg-rose-50 border-rose-200 text-rose-800'
-                    : selectedDoctor.status === 'IN_CONSULTATION'
-                    ? 'bg-amber-50 border-amber-200 text-amber-900'
-                    : 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                }`}>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900">Dr. {selectedDoctor.name}</span>
-                    <span className="text-[11px] text-slate-600">({selectedDoctor.qualification} • {selectedDoctor.experience})</span>
+              {selectedDoctor && (() => {
+                const isAvail = selectedDoctor.availabilityStatus === 'AVAILABLE';
+                const isOnLeave = selectedDoctor.availabilityStatus === 'ON_LEAVE';
+                const isInConsult = selectedDoctor.availabilityStatus === 'IN_CONSULTATION';
+                const isOffDuty = selectedDoctor.availabilityStatus === 'OFF_DUTY';
+                const isEmergency = selectedDoctor.availabilityStatus === 'EMERGENCY_DUTY';
+
+                return (
+                  <div
+                    className={`p-3.5 rounded-2xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                      isOnLeave || isOffDuty
+                        ? 'bg-rose-50 border-rose-200 text-rose-900'
+                        : isInConsult
+                        ? 'bg-amber-50 border-amber-200 text-amber-900'
+                        : isEmergency
+                        ? 'bg-purple-50 border-purple-200 text-purple-900'
+                        : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-base ${
+                          isOnLeave || isOffDuty
+                            ? 'bg-rose-100 text-rose-700'
+                            : isInConsult
+                            ? 'bg-amber-100 text-amber-700'
+                            : isEmergency
+                            ? 'bg-purple-100 text-purple-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}
+                      >
+                        👨‍⚕️
+                      </div>
+                      <div>
+                        <span className="font-bold text-slate-900 block text-sm">{selectedDoctor.name}</span>
+                        <span className="text-[11px] text-slate-600 block">
+                          {selectedDoctor.specialization} • {selectedDoctor.qualification} ({selectedDoctor.experience} yrs)
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-semibold text-slate-500">Live Status:</span>
+                      <span
+                        className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${
+                          isOnLeave
+                            ? 'bg-rose-200 text-rose-900'
+                            : isInConsult
+                            ? 'bg-amber-200 text-amber-900'
+                            : isOffDuty
+                            ? 'bg-slate-200 text-slate-800'
+                            : isEmergency
+                            ? 'bg-purple-200 text-purple-900'
+                            : 'bg-emerald-200 text-emerald-900'
+                        }`}
+                      >
+                        {isOnLeave
+                          ? '🔴 ON LEAVE (UNAVAILABLE)'
+                          : isInConsult
+                          ? '🟡 IN CONSULTATION'
+                          : isOffDuty
+                          ? '⚪ OFF DUTY'
+                          : isEmergency
+                          ? '🚨 EMERGENCY DUTY'
+                          : '🟢 AVAILABLE'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-semibold text-slate-500">Live Status:</span>
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                      selectedDoctor.status === 'ON_LEAVE'
-                        ? 'bg-rose-200 text-rose-900'
-                        : selectedDoctor.status === 'IN_CONSULTATION'
-                        ? 'bg-amber-200 text-amber-900'
-                        : 'bg-emerald-200 text-emerald-900'
-                    }`}>
-                      {selectedDoctor.status === 'ON_LEAVE' ? 'On Leave (Unavailable)' : selectedDoctor.status === 'IN_CONSULTATION' ? 'In Consultation' : 'Available'}
-                    </span>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* 4. Date & Time Slot */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -994,18 +1069,27 @@ export const AppointmentView: React.FC<AppointmentViewProps> = ({
                     <select
                       id="appointment-time-select"
                       value={appointmentTime}
+                      disabled={isDoctorUnavailable}
                       onChange={(e) => setAppointmentTime(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-xs"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-xs disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
                     >
-                      {availableSlotsWithCapacity.map((item) => (
-                        <option key={item.slot} value={item.slot} disabled={item.isFullyBooked}>
-                          {item.slot} — {item.label}
-                        </option>
-                      ))}
+                      {isDoctorUnavailable ? (
+                        <option value="">Doctor On Leave — OPD Consultations Suspended</option>
+                      ) : (
+                        availableSlotsWithCapacity.map((item) => (
+                          <option key={item.slot} value={item.slot} disabled={item.isFullyBooked}>
+                            {item.slot} — {item.label}
+                          </option>
+                        ))
+                      )}
                     </select>
                   </div>
-                  {/* Real-time slot status indicator */}
-                  {(() => {
+                  {isDoctorUnavailable ? (
+                    <div className="mt-1.5 p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-semibold flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      <span>Dr. {selectedDoctor?.name} is currently ON LEAVE. Slot selection disabled.</span>
+                    </div>
+                  ) : (() => {
                     const currentSlot = availableSlotsWithCapacity.find((s) => s.slot === appointmentTime);
                     if (!currentSlot) return null;
                     return (

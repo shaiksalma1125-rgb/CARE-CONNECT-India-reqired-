@@ -33,9 +33,24 @@ export const DiagnosticServicesView: React.FC<DiagnosticServicesViewProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [bookedSlotMsg, setBookedSlotMsg] = useState<string | null>(null);
+  const [dataVersion, setDataVersion] = useState(0);
 
-  const hospitals = useMemo(() => apiStore.getHospitals(), []);
-  const diagnostics = useMemo(() => apiStore.getDiagnostics(), []);
+  React.useEffect(() => {
+    const handleDataUpdate = () => {
+      setDataVersion((v) => v + 1);
+    };
+    window.addEventListener('healthcare-data-updated', handleDataUpdate);
+    window.addEventListener('healthcare-services-updated', handleDataUpdate);
+    window.addEventListener('storage', handleDataUpdate);
+    return () => {
+      window.removeEventListener('healthcare-data-updated', handleDataUpdate);
+      window.removeEventListener('healthcare-services-updated', handleDataUpdate);
+      window.removeEventListener('storage', handleDataUpdate);
+    };
+  }, []);
+
+  const hospitals = useMemo(() => apiStore.getHospitals(), [dataVersion]);
+  const diagnostics = useMemo(() => apiStore.getDiagnostics(), [dataVersion]);
 
   const filteredDiagnostics = useMemo(() => {
     const q = String(searchQuery || '').trim().toLowerCase();

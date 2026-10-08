@@ -28,7 +28,25 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
   language
 }) => {
   const t = translations[language];
-  const doctor = useMemo(() => apiStore.getDoctorById(doctorId), [doctorId]);
+  const [appointmentVersion, setAppointmentVersion] = useState(0);
+
+  useEffect(() => {
+    const handleAppointmentsChange = () => {
+      setAppointmentVersion((v) => v + 1);
+    };
+    window.addEventListener('healthcare-appointments-updated', handleAppointmentsChange);
+    window.addEventListener('healthcare-doctors-updated', handleAppointmentsChange);
+    window.addEventListener('healthcare-data-updated', handleAppointmentsChange);
+    window.addEventListener('storage', handleAppointmentsChange);
+    return () => {
+      window.removeEventListener('healthcare-appointments-updated', handleAppointmentsChange);
+      window.removeEventListener('healthcare-doctors-updated', handleAppointmentsChange);
+      window.removeEventListener('healthcare-data-updated', handleAppointmentsChange);
+      window.removeEventListener('storage', handleAppointmentsChange);
+    };
+  }, []);
+
+  const doctor = useMemo(() => apiStore.getDoctorById(doctorId), [doctorId, appointmentVersion]);
   const hospital = useMemo(
     () => (doctor ? apiStore.getHospitalById(doctor.hospitalId) : undefined),
     [doctor]
@@ -40,20 +58,6 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
     return today.toISOString().split('T')[0];
   });
   const [selectedSlot, setSelectedSlot] = useState<string>('');
-
-  const [appointmentVersion, setAppointmentVersion] = useState(0);
-
-  useEffect(() => {
-    const handleAppointmentsChange = () => {
-      setAppointmentVersion((v) => v + 1);
-    };
-    window.addEventListener('healthcare-appointments-updated', handleAppointmentsChange);
-    window.addEventListener('storage', handleAppointmentsChange);
-    return () => {
-      window.removeEventListener('healthcare-appointments-updated', handleAppointmentsChange);
-      window.removeEventListener('storage', handleAppointmentsChange);
-    };
-  }, []);
 
   const slotsWithAvailability = useMemo(() => {
     if (!doctor) return [];
@@ -88,8 +92,13 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
   }
 
   const isAvail = doctor.availabilityStatus === 'AVAILABLE';
+  const isOnLeave = doctor.availabilityStatus === 'ON_LEAVE' || doctor.status === 'ON_LEAVE';
+  const isInConsult = doctor.availabilityStatus === 'IN_CONSULTATION';
+  const isOffDuty = doctor.availabilityStatus === 'OFF_DUTY';
+  const isEmergencyDuty = doctor.availabilityStatus === 'EMERGENCY_DUTY';
 
   const handleProceedBooking = () => {
+    if (isOnLeave || isOffDuty) return;
     onNavigate('appointment', {
       hospitalId: hospital.id,
       doctorId: doctor.id,
@@ -121,12 +130,26 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
             <div>
               <span
                 className={`inline-block text-[11px] font-bold px-2.5 py-0.5 rounded-full border mb-1.5 ${
-                  isAvail
-                    ? 'bg-blue-50 text-blue-700 border-blue-200'
-                    : 'bg-amber-50 text-amber-800 border-amber-300'
+                  isOnLeave
+                    ? 'bg-rose-50 text-rose-800 border-rose-300'
+                    : isAvail
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                    : isInConsult
+                    ? 'bg-amber-50 text-amber-800 border-amber-300'
+                    : isOffDuty
+                    ? 'bg-slate-100 text-slate-700 border-slate-300'
+                    : 'bg-purple-50 text-purple-800 border-purple-300'
                 }`}
               >
-                {isAvail ? '● Currently Available for Consult' : '● Scheduled OPD Only'}
+                {isOnLeave
+                  ? '🔴 Currently On Leave (Unavailable)'
+                  : isAvail
+                  ? '🟢 Available for OPD Consultation'
+                  : isInConsult
+                  ? '🟡 Currently in Consultation'
+                  : isOffDuty
+                  ? '⚪ Currently Off Duty'
+                  : '🚨 Emergency Duty'}
               </span>
               <h1 className="text-xl font-bold text-slate-900 leading-tight">{doctor.name}</h1>
               <p className="text-xs font-bold text-blue-700">{doctor.specialization}</p>
@@ -237,18 +260,35 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
             </div>
           </div>
 
-          <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+          {isOnLeave && (
+            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-center gap-2.5">
+              <span className="text-base">🔴</span>
+              <div>
+                <strong className="block font-bold">Consultations Suspended — Doctor On Leave</strong>
+                <span className="text-[11px] text-rose-700">
+                  Dr. {doctor.name} is currently marked ON LEAVE by hospital staff. New OPD booking slots are unavailable.
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="text-xs text-slate-500">
               No booking fees. Free government healthcare access.
             </div>
 
             <button
               id="doctor-book-proceed-btn"
+              disabled={isOnLeave || isOffDuty}
               onClick={handleProceedBooking}
-              className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs transition-colors flex items-center gap-2"
+              className={`px-6 py-3 rounded-xl font-semibold text-xs shadow-xs transition-colors flex items-center gap-2 ${
+                isOnLeave || isOffDuty
+                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'
+              }`}
             >
               <Calendar className="w-4 h-4" />
-              <span>Proceed to Patient Details & Confirm</span>
+              <span>{isOnLeave ? 'Unavailable (Doctor On Leave)' : isOffDuty ? 'Doctor Off Duty' : 'Proceed to Patient Details & Confirm'}</span>
             </button>
           </div>
         </div>
